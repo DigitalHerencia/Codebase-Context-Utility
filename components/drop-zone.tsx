@@ -5,8 +5,7 @@ import type React from "react"
 import { useState, useRef, type DragEvent } from "react"
 import { useFileSystem } from "@/components/file-system-provider"
 import { cn } from "@/lib/utils"
-import { FolderOpen, Upload } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Upload } from "lucide-react"
 
 interface DropZoneProps {
   className?: string
@@ -88,16 +87,7 @@ export function DropZone({ className }: DropZoneProps) {
         </div>
         <div className="space-y-2">
           <h3 className="text-lg font-semibold">Drag and drop files or folders</h3>
-          <p className="text-sm text-muted-foreground">Drop your files here or click to browse</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleFileSelect} disabled={isLoading}>
-            Select Files
-          </Button>
-          <Button variant="default" onClick={handleFolderSelect} disabled={isLoading}>
-            <FolderOpen className="mr-2 h-4 w-4" />
-            Select Folder
-          </Button>
+          <p className="text-sm text-muted-foreground">Drop your files here to analyze</p>
         </div>
       </div>
 
@@ -109,6 +99,7 @@ export function DropZone({ className }: DropZoneProps) {
         className="hidden"
         onChange={handleFileInputChange}
         tabIndex={-1}
+        accept=".js,.jsx,.ts,.tsx,.css,.scss,.html,.json,.md,.txt"
       />
       <input
         ref={folderInputRef}
@@ -117,7 +108,41 @@ export function DropZone({ className }: DropZoneProps) {
         directory=""
         webkitdirectory=""
         className="hidden"
-        onChange={handleFileInputChange}
+        onChange={(e) => {
+          // Filter out unwanted files and folders before processing
+          if (e.target.files) {
+            const filteredFiles = Array.from(e.target.files).filter((file) => {
+              const path = file.webkitRelativePath || file.name
+              // Skip node_modules, .git, .next folders and binary/image files
+              return (
+                !path.includes("node_modules/") &&
+                !path.includes(".git/") &&
+                !path.includes(".next/") &&
+                !path.includes("dist/") &&
+                !path.includes("build/") &&
+                !path.match(
+                  /\.(jpg|jpeg|png|gif|bmp|ico|webp|mp3|mp4|mov|pdf|zip|tar|gz|exe|dll|woff|woff2|eot|ttf)$/i,
+                ) &&
+                !path.includes("package-lock.json") &&
+                !path.includes("yarn.lock") &&
+                file.size < 1024 * 1024
+              ) // Skip files larger than 1MB (likely binary)
+            })
+
+            // Create a new FileList-like object with filtered files
+            const dataTransfer = new DataTransfer()
+            filteredFiles.forEach((file) => dataTransfer.items.add(file))
+
+            // Call the original handler with filtered files
+            handleFileInputChange({
+              ...e,
+              target: {
+                ...e.target,
+                files: dataTransfer.files,
+              },
+            })
+          }
+        }}
         tabIndex={-1}
       />
     </div>

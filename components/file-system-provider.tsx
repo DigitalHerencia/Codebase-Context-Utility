@@ -1,20 +1,20 @@
 "use client"
 
 import type {} from "@/lib/file-system-access-types"
-import { createContext, useContext, useState, type ReactNode } from "react"
+import { createContext, useContext, useState, useCallback, type ReactNode } from "react"
 
 // Define types for our file system
 export interface FileEntry {
   name: string
   type: "file" | "directory"
   path: string
-  handle?: FileSystemHandle // Change this line
+  handle?: FileSystemHandle
   language?: string
   children?: Record<string, FileEntry>
   content?: string
   size?: number
   lastModified?: number
-  error?: string // Add error property
+  error?: string
 }
 
 export interface FileSystemContextType {
@@ -27,7 +27,10 @@ export interface FileSystemContextType {
   isLoading: boolean
   addFiles: (files: FileList | File[] | DataTransfer) => Promise<void>
   rootDirectoryHandle: FileSystemDirectoryHandle | null
-  refreshFileTree: () => Promise<void> // Add this line
+  refreshFileTree: () => Promise<void>
+  selectedFilesForContext: Set<string>
+  toggleFileSelection: (path: string, type: "file" | "directory", selected: boolean) => void
+  getSelectedFiles: () => Promise<Array<{ path: string; content: string; language: string }>>
 }
 
 const FileSystemContext = createContext<FileSystemContextType | null>(null)
@@ -71,6 +74,7 @@ export function FileSystemProvider({ children }: FileSystemProviderProps) {
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [rootDirectoryHandle, setRootDirectoryHandle] = useState<FileSystemDirectoryHandle | null>(null)
+  const [selectedFilesForContext, setSelectedFilesForContext] = useState<Set<string>>(new Set())
 
   // Check if File System Access API is supported and allowed
   const isFileSystemAccessSupported = () => {
@@ -167,6 +171,11 @@ export function FileSystemProvider({ children }: FileSystemProviderProps) {
                 size: file.size,
                 lastModified: file.lastModified,
               }
+
+              // Auto-select non-binary files for context
+              if (!isBinary(name, file.size)) {
+                setSelectedFilesForContext((prev) => new Set([...prev, childPath]))
+              }
             } catch (fileError: any) {
               console.warn(`Error processing file ${name}:`, fileError)
               // Add entry with error information
@@ -182,6 +191,11 @@ export function FileSystemProvider({ children }: FileSystemProviderProps) {
           } else if (handle.kind === "directory") {
             try {
               entry.children![name] = await processDirectory(handle as FileSystemDirectoryHandle, childPath)
+
+              // Auto-select directories for context (except excluded ones)
+              if (!["node_modules", ".git", ".next", "dist", "build"].includes(name)) {
+                setSelectedFilesForContext((prev) => new Set([...prev, childPath]))
+              }
             } catch (dirError: any) {
               console.warn(`Error processing directory ${name}:`, dirError)
               // Add entry with error information
@@ -256,6 +270,8 @@ export function FileSystemProvider({ children }: FileSystemProviderProps) {
 
     try {
       setIsLoading(true)
+      // Clear previous selections
+      setSelectedFilesForContext(new Set())
 
       // Show directory picker
       const dirHandle = await window.showDirectoryPicker()
@@ -267,6 +283,9 @@ export function FileSystemProvider({ children }: FileSystemProviderProps) {
       // Update file tree
       setFileTree({ [rootEntry.name]: rootEntry })
       setSelectedFile(null)
+
+      // Auto-select the root directory
+      setSelectedFilesForContext((prev) => new Set([...prev, rootEntry.path]))
     } catch (error) {
       console.error("Error opening directory:", error)
       // User cancelled or error occurred
@@ -322,6 +341,11 @@ export function FileSystemProvider({ children }: FileSystemProviderProps) {
 
       setFileTree(newFileTree)
       setSelectedFile(fileName)
+
+      // Auto-select the file for context if it's not binary
+      if (!isBinary(fileName, file.size)) {
+        setSelectedFilesForContext((prev) => new Set([...prev, fileName]))
+      }
     } catch (error) {
       console.error("Error opening file:", error)
       // User cancelled or error occurred
@@ -382,6 +406,11 @@ export function FileSystemProvider({ children }: FileSystemProviderProps) {
   const processDroppedFile = async (file: File, basePath = ""): Promise<FileEntry> => {
     const path = basePath ? `${basePath}/${file.name}` : file.name
 
+    // Auto-select non-binary files for context
+    if (!isBinary(file.name, file.size)) {
+      setSelectedFilesForContext((prev) => new Set([...prev, path]))
+    }
+
     return {
       name: file.name,
       type: "file",
@@ -405,6 +434,11 @@ export function FileSystemProvider({ children }: FileSystemProviderProps) {
       type: "directory",
       path,
       children: {},
+    }
+
+    // Auto-select directories for context (except excluded ones)
+    if (!["node_modules", ".git", ".next", "dist", "build"].includes(entry.name)) {
+      setSelectedFilesForContext((prev) => new Set([...prev, path]))
     }
 
     // Read all entries in the directory
@@ -492,6 +526,148 @@ export function FileSystemProvider({ children }: FileSystemProviderProps) {
     }
   }
 
+  // Toggle file selection for context generation
+  const toggleFileSelection = useCallback(
+    (path: string, type: "file" | "directory", selected: boolean) => {
+      setSelectedFilesForContext((prev) => {
+        const newSelection = new Set(prev)
+
+        if (selected) {
+          // Add the current path
+          newSelection.add(path)
+
+          // If it's a directory, recursively select all children
+          if (type === "directory") {
+            // Helper function to find a directory in the file tree
+            const findDirectory = (dirPath: string): FileEntry | null => {
+              const pathParts = dirPath.split("/")
+              let current = fileTree
+
+              for (let i = 0; i < pathParts.length; i++) {
+                const part = pathParts[i]
+                if (!current[part]) {
+                  return null
+                }
+
+                if (i === pathParts.length - 1) {
+                  return current[part]
+                }
+
+                if (current[part].children) {
+                  current = current[part].children
+                } else {
+                  return null
+                }
+              }
+
+              return null
+            }
+
+            // Helper function to add all children of a directory
+            const addAllChildren = (dir: Record<string, FileEntry>, parentPath: string) => {
+              Object.entries(dir).forEach(([name, entry]) => {
+                const childPath = `${parentPath}/${name}`
+                newSelection.add(childPath)
+
+                if (entry.type === "directory" && entry.children) {
+                  addAllChildren(entry.children, childPath)
+                }
+              })
+            }
+
+            // Find the directory and add all its children
+            const dirEntry = findDirectory(path)
+            if (dirEntry && dirEntry.type === "directory" && dirEntry.children) {
+              addAllChildren(dirEntry.children, path)
+            }
+          }
+        } else {
+          // Remove the current path
+          newSelection.delete(path)
+
+          // If it's a directory, recursively deselect all children
+          if (type === "directory") {
+            // Find all paths that start with this directory path
+            ;[...newSelection].forEach((selectedPath) => {
+              if (selectedPath.startsWith(path + "/")) {
+                newSelection.delete(selectedPath)
+              }
+            })
+          }
+        }
+
+        return newSelection
+      })
+    },
+    [fileTree],
+  )
+
+  // Helper function to get a directory from a path
+  const getDirectoryFromPath = (path: string, tree: Record<string, FileEntry>): FileEntry | null => {
+    const pathParts = path.split("/")
+    let current = tree
+
+    for (let i = 0; i < pathParts.length; i++) {
+      const part = pathParts[i]
+      if (current[part]) {
+        if (i === pathParts.length - 1) {
+          return current[part]
+        } else if (current[part].children) {
+          current = current[part].children || {}
+        } else {
+          return null
+        }
+      } else {
+        return null
+      }
+    }
+
+    return null
+  }
+
+  // Get selected files for context generation
+  const getSelectedFiles = async (): Promise<Array<{ path: string; content: string; language: string }>> => {
+    const selectedFiles: Array<{ path: string; content: string; language: string }> = []
+
+    for (const path of selectedFilesForContext) {
+      try {
+        // Skip directories, we only want files
+        const pathParts = path.split("/")
+        let current = fileTree
+        let isFile = false
+
+        for (let i = 0; i < pathParts.length - 1; i++) {
+          const part = pathParts[i]
+          if (current[part] && current[part].children) {
+            current = current[part].children!
+          } else {
+            break
+          }
+        }
+
+        const fileName = pathParts[pathParts.length - 1]
+        const fileEntry = current[fileName]
+
+        if (fileEntry && fileEntry.type === "file") {
+          isFile = true
+          const content = await readFileContent(path)
+          selectedFiles.push({
+            path,
+            content,
+            language: fileEntry.language || "plaintext",
+          })
+        }
+
+        // Skip if it's a directory
+        if (!isFile) continue
+      } catch (error) {
+        console.warn(`Error reading selected file ${path}:`, error)
+      }
+    }
+
+    return selectedFiles
+  }
+
   const value: FileSystemContextType = {
     fileTree,
     selectedFile,
@@ -502,9 +678,14 @@ export function FileSystemProvider({ children }: FileSystemProviderProps) {
     isLoading,
     addFiles,
     rootDirectoryHandle,
-    refreshFileTree, // Add this line
+    refreshFileTree,
+    selectedFilesForContext,
+    toggleFileSelection,
+    getSelectedFiles,
   }
 
   return <FileSystemContext.Provider value={value}>{children}</FileSystemContext.Provider>
 }
+
+export { FileSystemContext }
 

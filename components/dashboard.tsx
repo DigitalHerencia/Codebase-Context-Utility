@@ -1,15 +1,15 @@
 "use client"
-import { FileTree } from "@/components/file-tree"
 
+import { useState, useEffect } from "react"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { ResizablePanel, ResizablePanelGroup, ResizableHandle } from "@/components/ui/resizable"
+import { Alert,  AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { useFileSystem } from "@/lib/use-file-system"
+import { DropZone } from "@/components/drop-zone"
+import { FileTree } from "@/components/file-tree"
 import { CodePreview } from "@/components/code-preview"
 import { ContextProvider } from "@/components/context-provider"
-import { DropZone } from "@/components/drop-zone"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
-import { useFileSystem } from "@/components/file-system-provider"
-import { useState, useEffect } from "react"
 import { AlertCircle } from "lucide-react"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 export function Dashboard() {
   const { fileTree, selectedFile, isLoading } = useFileSystem()
@@ -25,7 +25,15 @@ export function Dashboard() {
       {!hasFiles ? (
         <DropZone className="h-[calc(100vh-6rem)]" />
       ) : (
-        <>
+        <Tabs defaultValue="preview" className="h-full flex flex-col">
+          <div className="flex items-center justify-between mb-4">
+            <TabsList>
+              <TabsTrigger value="preview">Preview</TabsTrigger>
+              <TabsTrigger value="context">LLM Context</TabsTrigger>
+            </TabsList>
+            <div className="text-sm text-muted-foreground">{selectedFile ? selectedFile : "No file selected"}</div>
+          </div>
+
           {Object.keys(fileTree).length === 0 ? (
             <Alert variant="destructive" className="mb-4">
               <AlertCircle className="h-4 w-4" />
@@ -47,26 +55,17 @@ export function Dashboard() {
             </ResizablePanel>
             <ResizableHandle withHandle />
             <ResizablePanel defaultSize={75}>
-              <Tabs defaultValue="preview" className="h-full flex flex-col">
-                <div className="flex items-center justify-between p-3">
-                  <TabsList>
-                    <TabsTrigger value="preview">Preview</TabsTrigger>
-                    <TabsTrigger value="context">LLM Context</TabsTrigger>
-                  </TabsList>
-                  <div className="text-sm text-muted-foreground">
-                    {selectedFile ? selectedFile : "No file selected"}
-                  </div>
-                </div>
-                <TabsContent value="preview" className="m-0 flex-1 overflow-auto no-scrollbar">
+              <div className="h-full flex flex-col">
+                <TabsContent value="preview" className="m-0 flex-1 overflow-auto no-scrollbar h-full">
                   <CodePreview filePath={selectedFile} />
                 </TabsContent>
-                <TabsContent value="context" className="m-0 flex-1 overflow-auto no-scrollbar">
+                <TabsContent value="context" className="m-0 flex-1 overflow-auto no-scrollbar h-full">
                   <ContextProvider />
                 </TabsContent>
-              </Tabs>
+              </div>
             </ResizablePanel>
           </ResizablePanelGroup>
-        </>
+        </Tabs>
       )}
     </div>
   )

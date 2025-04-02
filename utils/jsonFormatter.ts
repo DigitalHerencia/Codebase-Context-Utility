@@ -1,19 +1,13 @@
-/**
- * Generates a JSON representation of the codebase context
- *
- * @param context The codebase context data
- * @param minify Whether to minify the JSON output
- * @returns JSON string representation
- */
 export function generateJSON(context: any, minify = false): string {
   try {
-    // Create a clean output structure
+    // Create a clean output structure with executive summary
     const output = {
       metadata: context.metadata || {},
       summary: {
         totalFiles: context.files?.length || 0,
         fileTypes: getFileTypeCounts(context.files || []),
         totalSize: getTotalSize(context.files || []),
+        directoryStructure: getDirectoryStructure(context.files || []),
       },
       architecture: context.architecture || "",
       dependencies: context.dependencies || {},
@@ -53,5 +47,20 @@ function getFileTypeCounts(files: any[]): Record<string, number> {
  */
 function getTotalSize(files: any[]): number {
   return files.reduce((total, file) => total + (file.content?.length || 0), 0)
+}
+
+/**
+ * Generates a directory structure from file paths
+ */
+function getDirectoryStructure(files: any[]): Record<string, number> {
+  const directories: Record<string, number> = {}
+
+  files.forEach((file) => {
+    const pathParts = file.path.split("/")
+    const directory = pathParts.length > 1 ? pathParts[0] : "root"
+    directories[directory] = (directories[directory] || 0) + 1
+  })
+
+  return directories
 }
 

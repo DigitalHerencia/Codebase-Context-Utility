@@ -1,6 +1,3 @@
-// Type definitions for the File System Access API
-// Based on https://wicg.github.io/file-system-access/
-
 export {}
 
 declare global {

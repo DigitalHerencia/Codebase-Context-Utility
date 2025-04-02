@@ -29,7 +29,7 @@ function useToastPrimitive<Reducer extends (state: any, action: any) => any>(
     | { type: "REMOVE_TOAST"; payload: any }
 
   const boundActions = Object.fromEntries(
-    Object.keys( actionTypes ).map( ( key ) => [ key, ( payload: any ) => dispatch( { type: key as any, payload } ) ] )
+    Object.keys(actionTypes).map((key) => [key, (payload: any) => dispatch({ type: key as any, payload })]),
   ) as unknown as ActionType<typeof actionTypes>
 
   const subscribe = (fn: (state: StateType<typeof initialState>) => void) => {

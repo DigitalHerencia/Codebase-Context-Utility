@@ -5,33 +5,27 @@ import { useFileSystem } from "@/components/file-system-provider"
 import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
+import { countTokens } from "@/utils/tokenCounter"
 
 interface ContextSizeEstimatorProps {
-  maxSize: number // in tokens
-  targetLLM: string
+  maxTokens: number
 }
 
-function getTokenLimitForLLM(_llm: string): number {
-  // All models now have the same context window of 128,000 tokens
-  return 128000
-}
-
-export function ContextSizeEstimator({ targetLLM }: ContextSizeEstimatorProps) {
+export function ContextSizeEstimator({ maxTokens }: ContextSizeEstimatorProps) {
   const { fileTree } = useFileSystem()
   const [estimatedSize, setEstimatedSize] = useState(0)
   const [isCalculating, setIsCalculating] = useState(false)
-
-  // Get the token limit for the selected LLM
-  const tokenLimit = getTokenLimitForLLM(targetLLM)
 
   useEffect(() => {
     const calculateSize = async () => {
       setIsCalculating(true)
 
       let totalChars = 0
+      let totalFiles = 0
 
       const processEntry = async (entry: any) => {
         if (entry.type === "file") {
+          totalFiles++
           if (entry.content) {
             totalChars += entry.content.length
           } else if (entry.size) {
@@ -48,9 +42,14 @@ export function ContextSizeEstimator({ targetLLM }: ContextSizeEstimatorProps) {
         await processEntry(entry)
       }
 
-      // Estimate tokens (roughly 4 chars per token)
-      const estimatedTokens = Math.ceil(totalChars / 4)
-      setEstimatedSize(estimatedTokens)
+      // More accurate token estimation based on character count and file count
+      // We use a more conservative estimate that accounts for code structure
+      const estimatedTokens = Math.ceil(countTokens(`Files: ${totalFiles}\nTotal characters: ${totalChars}`))
+
+      // Add overhead for metadata, structure, and formatting
+      const overhead = Math.min(10000, totalFiles * 100) // Cap overhead at 10k tokens
+
+      setEstimatedSize(estimatedTokens + overhead)
       setIsCalculating(false)
     }
 
@@ -61,8 +60,8 @@ export function ContextSizeEstimator({ targetLLM }: ContextSizeEstimatorProps) {
     }
   }, [fileTree])
 
-  const percentOfMax = (estimatedSize / tokenLimit) * 100
-  const isOverLimit = estimatedSize > tokenLimit
+  const percentOfMax = (estimatedSize / maxTokens) * 100
+  const isOverLimit = estimatedSize > maxTokens
 
   return (
     <div className="space-y-2 mb-4">
@@ -71,7 +70,7 @@ export function ContextSizeEstimator({ targetLLM }: ContextSizeEstimatorProps) {
         <div className="text-sm">
           {isCalculating
             ? "Calculating..."
-            : `${estimatedSize.toLocaleString()} / ${tokenLimit.toLocaleString()} tokens`}
+            : `${estimatedSize.toLocaleString()} / ${maxTokens.toLocaleString()} tokens`}
         </div>
       </div>
 

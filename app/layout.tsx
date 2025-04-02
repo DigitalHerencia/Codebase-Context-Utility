@@ -12,7 +12,7 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "Codebase Context Utility",
   description: "A tool for generating LLM context from your codebase",
-  }
+}
 
 export default function RootLayout({
   children,
@@ -36,6 +36,5 @@ export default function RootLayout({
   )
 }
 
+import "./globals.css"
 
-
-import './globals.css'
