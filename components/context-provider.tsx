@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { Copy, Download, RefreshCw, Search } from "lucide-react"
 import { toast } from "sonner"
 import { useFileSystem } from "@/components/file-system-provider"
@@ -153,16 +153,16 @@ export function ContextProvider() {
       fileTypes[extension] = (fileTypes[extension] || 0) + 1
     })
 
-  const context: any = {
-    files,
-    metadata: {
-      totalFiles: files.length,
-      totalSize: files.reduce((acc, file) => acc + file.content.length, 0),
-      languages: Array.from(new Set(files.map((file) => file.language))),
-      timestamp: new Date().toISOString(),
-      fileTypes,
-    },
-  };
+    const context = {
+      files,
+      metadata: {
+        totalFiles: files.length,
+        totalSize: files.reduce((acc, file) => acc + file.content.length, 0),
+        languages: Array.from(new Set(files.map((file) => file.language))),
+        timestamp: new Date().toISOString(),
+        fileTypes,
+      },
+    }
 
     // Generate dependencies and architecture in parallel for performance
     const dependencies = await Promise.resolve(mapDependencies(context))
@@ -303,12 +303,6 @@ export function ContextProvider() {
         )}
 
         <Tabs defaultValue="preview" className="flex-1 flex flex-col">
-          <TabsList>
-            <TabsTrigger value="preview">Preview</TabsTrigger>
-            <TabsTrigger value="summary">Summary</TabsTrigger>
-            <TabsTrigger value="visualization">Visualization</TabsTrigger>
-          </TabsList>
-
           <TabsContent value="preview" className="flex-1 p-0">
             <div className="mb-4 flex items-center gap-2">
               <div className="relative flex-1">

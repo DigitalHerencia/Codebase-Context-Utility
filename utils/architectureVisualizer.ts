@@ -9,7 +9,6 @@ interface CodebaseContext {
     totalSize: number
     languages: string[]
     timestamp: string
-    targetLLM: string
   }
 }
 
